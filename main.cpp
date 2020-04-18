@@ -83,7 +83,7 @@ struct _type_eth_arp make_broadcast_packet(uint8_t *s_mac,in_addr s_ip,in_addr t
 }
 
 void time_error(int signo){
-    printf("error : time error\n");
+    printf("error : No Macs found for corresponding IP\n");
     exit(1);
 }
 
