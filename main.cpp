@@ -16,7 +16,7 @@
 
 #define MAC_LEN 6
 #define IP_LEN 4
-#define TIME_INTERVAL 30
+#define TIME_INTERVAL 60
 
 #pragma pack(push, 1)
 typedef  struct _type_eth_arp{
@@ -35,22 +35,21 @@ typedef  struct _type_eth_arp{
 } type_eth_arp;
 #pragma pack(pop)
 
-void get_my_mac(char* dev,uint8_t *a_mac){
+bool get_my_mac(char* dev,uint8_t *a_mac){
     struct ifreq s;
     int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
-
+    
     strcpy(s.ifr_name, dev);
     if (0 == ioctl(fd, SIOCGIFHWADDR, &s)) {
         for (int i = 0; i < 6; i++)
             a_mac[i]=s.ifr_addr.sa_data[i];
     }
-    else {
-        printf("error : mac_address can't be imported\n");
-        exit(1);
-    }
+    else
+        return false;
+    return true;
 }
 
-void get_my_ip (char * dev,in_addr *a_ip) {
+bool get_my_ip (char * dev,in_addr *a_ip) {
     struct ifreq ifrq;
     struct sockaddr_in * sin;
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -59,10 +58,9 @@ void get_my_ip (char * dev,in_addr *a_ip) {
         sin = reinterpret_cast<struct sockaddr_in *>(&ifrq.ifr_addr);
         memcpy (a_ip, reinterpret_cast<void *>(&sin->sin_addr), sizeof(sin->sin_addr));
     }
-    else {
-        printf("error : ip_address can't be imported\n");
-        exit(1);
-    }
+    else
+        return false;
+    return true;
 }
 
 struct _type_eth_arp make_broadcast_packet(uint8_t *s_mac,in_addr s_ip,in_addr t_ip){
@@ -120,7 +118,7 @@ void make_infection_packet(pcap_t * handle, type_eth_arp *tmp, in_addr fake_ip){
 
 void usage() {
     printf("syntax: send-arp <interface> <sender ip> <target ip>\n");
-    printf("sample: send-arp wlan0\n");
+    printf("sample: send-arp wlan0 192.168.0.10 192.168.0.1\n");
 }
 
 int main(int argc, char* argv[]) {
@@ -141,13 +139,13 @@ int main(int argc, char* argv[]) {
     inet_aton(argv[3],&target_ip);
     get_my_mac(dev, my_mac);
     get_my_ip(dev, &my_ip);
-
+    
     type_eth_arp s_b = make_broadcast_packet(my_mac,my_ip,sender_ip);
     make_infection_packet(handle,&s_b,target_ip);
     printf("Send arp packet!\n");
     pcap_sendpacket(handle,reinterpret_cast<const u_char*>(&s_b), sizeof (type_eth_arp));
     pcap_sendpacket(handle,reinterpret_cast<const u_char*>(&s_b), sizeof (type_eth_arp));
-
+    
     while (true) {
         struct pcap_pkthdr* header;
         const u_char* packet;
@@ -167,3 +165,6 @@ int main(int argc, char* argv[]) {
     }
     pcap_close(handle);
 }
+
+
+
