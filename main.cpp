@@ -114,7 +114,7 @@ void set_target_mac(pcap_t * handle, type_eth_arp *tmp){
 
 void set_infection_packet(type_eth_arp *tmp, in_addr fake_ip){
     tmp->s_ip = fake_ip;
-    tmp->op_code = htons(ARPOP_RREPLY);
+    tmp->op_code = htons(ARPOP_REPLY);
 }
 
 void usage() {
