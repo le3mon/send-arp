@@ -137,8 +137,14 @@ int main(int argc, char* argv[]) {
     in_addr my_ip, sender_ip, target_ip;
     inet_aton(argv[2],&sender_ip);
     inet_aton(argv[3],&target_ip);
-    get_my_mac(dev, my_mac);
-    get_my_ip(dev, &my_ip);
+    if (get_my_mac(dev, my_mac) == false){
+        printf("error : mac_address can't be imported\n");
+        return -1;
+    }
+    if (get_my_ip(dev, &my_ip) == false){
+        printf("error : ip_address can't be imported\n");
+        return  -1;
+    }
     
     type_eth_arp s_b = make_broadcast_packet(my_mac,my_ip,sender_ip);
     make_infection_packet(handle,&s_b,target_ip);
